@@ -4,7 +4,12 @@ import numpy as np
 import matplotlib.animation as animation
 from scipy.sparse import spdiags
 
-
+def diff4_segment(f):
+    diff_f = np.zeros([2, N + 1])
+    for i in range(N + 1):
+        diff_f[0, i] = -g * (f[1, (i - 2 + N) % N] / 12 - (2 / 3) * f[1, (i - 1 + N) % N] + (2 / 3) * f[1, (i + 1 + N) % N] - f[1, (i + 2 + N) % N] / 12) / dx
+        diff_f[1, i] = -h0 * (f[0, (i - 2 + N) % N] / 12 - (2 / 3) * f[0, (i - 1 + N) % N] + (2 / 3) * f[0, (i + 1 + N) % N] - f[0, (i + 2 + N) % N] / 12) / dx
+    return diff_f
 
 
 def animatewater(sol):
@@ -37,7 +42,7 @@ def RK4(state):
 
 
 def matrix_diff(f):
-    diff = ((D @ f.transpose()) / dx).transpose()
+    diff = (D @ f.transpose()/dx).transpose()
     diff = np.flip(diff, 0)
     diff[0, :] = -g * diff[0, :]
     diff[1, :] = -h0 * diff[1, :]
@@ -84,7 +89,7 @@ def upg_matrix_factory():
     for i in range(5 - (NES+1)):
         xb = xb[:-1]
     global dx, x
-    dx = (b - a)/(2 * xb[-1] + N - 1 - 2*NES)
+    dx = (b - a)/(2 * xb[-1] + N - 2*NES)
     x = a + dx * np.concatenate([xb, np.linspace(xb[-1]+1, (b - a)/dx - xb[-1]-1, N+1-2*(NES+1)).transpose(), (b - a)/dx - np.flip(xb, 0)])
     P = np.zeros(BP)
     P[0] = 2.1259737557798e-01
@@ -98,29 +103,31 @@ def upg_matrix_factory():
     A[N-BP+1:N+1] = np.flip(P, 0)
     H = np.zeros([N+1, N+1])
     np.fill_diagonal(H, dx * A)
-    d = [[1 / 12], [-2/3], [0], [2/3], [1/12]]
+    d = [[1 / 12], [-2/3], [0], [2/3], [-1/12]]
     G = np.zeros([N + 1, N + 1])
     for i in range(5):
         G += (spdiags(d[i]*(N+1), i-2, N+1, N+1).toarray())
     Bound = np.array([[-0.5, 6.5605279837843e-01, -1.9875859409017e-01, 4.2705795711740e-02, 0, 0],
-             [-6.5605279837843e-01, 0, 8.1236966439895e-01, -1.5631686602052e-01, 0, 0],
-             [1.9875859409017e-01, -8.1236966439895e-01, 0, 6.9694440364211e-01, -1/12, 0],
-             [-4.2705795711740e-02,  1.5631686602052e-01,  -6.9694440364211e-01, 0, 2/3, -1/12]])
+                      [-6.5605279837843e-01, 0, 8.1236966439895e-01, -1.5631686602052e-01, 0, 0],
+                      [1.9875859409017e-01, -8.1236966439895e-01, 0, 6.9694440364211e-01, -1/12, 0],
+                      [-4.2705795711740e-02,  1.5631686602052e-01,  -6.9694440364211e-01, 0, 2/3, -1/12]])
     for i in range(BP):
         for j in range(BP):
             G[i, j] = Bound[i, j]
             G[N-i, N-j] = -Bound[i, j]
-    return np.linalg.inv(H) @ G, H, x, dx
+    print(G)
+    return np.linalg.lstsq(H, G, rcond=None)[0], H, x, dx
 
 
 def Energy():
     A = np.eye(N+1, N+1)
     nrg = np.zeros(Nt)
     A[0, 0] = A[N, N] = 1/2
+    A = A * dx
     for i in range(Nt):
         u = np.array(solution[i, 0, :])
         h = np.array(solution[i, 1, :])
-        nrg[i] = - h0 * g * (u @ (A @ (D @ h)) + h @ (A @ (D @ u)))
+        nrg[i] = - h0 * g * (u @ A @ (D @ h) + h @ A @ (D @ u))
     plt.plot(np.linspace(0, Nt, Nt), nrg)
     plt.show()
 
@@ -132,15 +139,17 @@ a = -15
 b = 15
 N = 150
 Nt = 1000
-#dx = (b - a) / N
-#D, H = matrix_factory()
-#x = a + dx * np.arange(0, N + 1)
-#ini_state = np.array([np.exp((-0.5) * (x ** 2)) / np.sqrt(2 * np.pi), np.exp((-0.5) * (x ** 2)) / np.sqrt(2 * np.pi)])
-#ini_state = np.array([np.zeros(len(x)), np.zeros(len(x))])
-D, H, x, dx = upg_matrix_factory()
+dx = (b - a) / N
+D, H = matrix_factory()
+x = a + dx * np.arange(0, N + 1)
+#D, H, x, dx = upg_matrix_factory()
+y = x**2
+#print(x)
+#print(D @ y/dx - 2*x)
 dt = dx / (np.sqrt(g * h0) * 4)
+#ini_state = np.array([np.exp((-0.5) * (x ** 2)) / np.sqrt(2 * np.pi), np.exp((-0.5) * (x ** 2)) / np.sqrt(2 * np.pi)])
 ini_state = np.array([np.zeros(x.size), np.exp((-0.5) * (x ** 2)) / np.sqrt(2 * np.pi)])
 solution = solveEquation(RK4D)
 Energy()
-#ani = animatewater(solution)
+ani = animatewater(solution)
 #ani.save('wall_water.gif', fps=25)
