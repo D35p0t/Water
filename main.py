@@ -93,7 +93,7 @@ def upg_matrix_factory():
     x = a + dx * np.concatenate([xb, np.linspace(xb[-1]+1, (b - a)/dx - xb[-1]-1, N+1-2*(NES+1)).transpose(), (b - a)/dx - np.flip(xb, 0)])
     P = np.zeros(BP)
     P[0] = 2.1259737557798e-01
-    P[1] = 1.0260290400758e+0
+    P[1] = 1.0260290400758e+00
     P[2] = 1.0775123588954e+00
     P[3] = 9.8607273802835e-01
     for i in range(4 - BP):
