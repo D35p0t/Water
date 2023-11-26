@@ -4,12 +4,7 @@ import numpy as np
 import matplotlib.animation as animation
 from scipy.sparse import spdiags
 
-def diff4_segment(f):
-    diff_f = np.zeros([2, N + 1])
-    for i in range(N + 1):
-        diff_f[0, i] = -g * (f[1, (i - 2 + N) % N] / 12 - (2 / 3) * f[1, (i - 1 + N) % N] + (2 / 3) * f[1, (i + 1 + N) % N] - f[1, (i + 2 + N) % N] / 12) / dx
-        diff_f[1, i] = -h0 * (f[0, (i - 2 + N) % N] / 12 - (2 / 3) * f[0, (i - 1 + N) % N] + (2 / 3) * f[0, (i + 1 + N) % N] - f[0, (i + 2 + N) % N] / 12) / dx
-    return diff_f
+
 
 
 def animatewater(sol):
