@@ -5,7 +5,7 @@ from scipy.sparse import spdiags
 
 
 class solve_typeI:
-    def __init__(self, sp, N, Nt, t_ac, type_in):
+    def __init__(self, sp, N, Nt=None, t_ac=None, type_in=None):
         self.sp = sp
         self.N = N
         self.Nt = Nt
@@ -26,7 +26,7 @@ class solve_typeI:
         return state + self.dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
     def matrix_diff(self, f):
-        diff = (self.D @ f.transpose() / self.dx).transpose()
+        diff = (self.D @ f.transpose()).transpose()
         diff = np.flip(diff, 0)
         diff[0, :] = -g * diff[0, :]
         diff[1, :] = -h0 * diff[1, :]
@@ -48,7 +48,7 @@ class solve_typeI:
                 G[self.N - i, self.N - j] = -G[i, j]
         for i in range(4, self.N - 3):
             G[i, i - 2:i + 3] = [1 / 12, -2 / 3, 0, 2 / 3, -1 / 12]
-        self.D = np.linalg.inv(H) @ G
+        self.D = (np.linalg.inv(H) @ G) / self.dx
         self.H = H
         self.x = self.sp[0] + self.dx * np.arange(0, self.N + 1)
 
@@ -84,7 +84,8 @@ class solve_typeII(solve_typeI):
             xb = xb[:-1]
         self.dx = (self.sp[1] - self.sp[0]) / (2 * xb[-1] + self.N - 2 * NES)
         self.x = self.sp[0] + self.dx * np.concatenate(
-            [xb, np.linspace(xb[-1] + 1, (self.sp[1] - self.sp[0]) / self.dx - xb[-1] - 1, self.N + 1 - 2 * (NES + 1)).transpose(),
+            [xb, np.linspace(xb[-1] + 1, (self.sp[1] - self.sp[0]) / self.dx - xb[-1] - 1,
+                             self.N + 1 - 2 * (NES + 1)).transpose(),
              (self.sp[1] - self.sp[0]) / self.dx - np.flip(xb, 0)])
         P = np.zeros(BP)
         P[0] = 2.1259737557798e-01
@@ -113,6 +114,7 @@ class solve_typeII(solve_typeI):
         self.D = np.linalg.lstsq(H, G, rcond=None)[0]
         self.H = H
 
+
 def animate_water(sol):
     fig = plt.figure()
     ax = fig.add_subplot(111, autoscale_on=False, xlim=(sol.sp[0] - 1, sol.sp[1] + 1), ylim=(5, 17))
@@ -129,17 +131,51 @@ def animate_water(sol):
         time_text.set_text(time_template % (i * sol.dt))
         return line, time_text
 
-    frames = animation.FuncAnimation(fig, animate1, sol.Nt, interval=sol.dt * 1000, blit=True, repeat=False)
+    frames = animation.FuncAnimation(fig, animate1, sol.Nt, interval=sol.dt * sol.Nt, blit=True, repeat=False)
     plt.show()
     return frames
 
 
 g = 9.81
 h0 = 10
-solution = solve_typeII([-15, 15], 150, 1000, 4, 1)
-solution.solveEquation(solution.RK4D)
-ani = animate_water(solution)
-#ani.save('water.gif', fps=25)
+wy1 = []
+wy2 = []
+wx = []
+solution1 = solve_typeII([0, 10], 10)
+solution1.matrix_factory()
+fig = plt.figure(figsize=(7, 4))
+ax = fig.add_subplot()
+
+for i in range(4, 10):
+
+    x = np.linspace(0, 1, 2 ** i + 1)
+    solution1 = solve_typeII([0, 1], 2 ** i)
+    solution1.matrix_factory()
+    y1 = np.cos(solution1.x)
+    y_1 = -np.sin(solution1.x)
+    diff1 = (solution1.D @ y1.transpose()).transpose()
+    diff2 = -x
+
+    err1 = 0
+    err2 = 0
+    for j in range(i + 1):
+        err1 += (diff1[j] - y_1[j])**2
+        err2 += (diff2[j] - y_1[j])**2
+    wy1.append(np.sqrt(err1 / i))
+    wy2.append(np.sqrt(err2 / i))
+    wx.append(2 ** i)
+
+ax.set_yscale('log')
+ax.set_xscale('log')
+ax.plot(wx, wy1, 'o', color='r',  markersize=2)
+ax.plot(wx, wy1, color='r', alpha=0.5)
+ax.plot(wx, wy2, 'o', color='b',  markersize=2)
+ax.plot(wx, wy2, color='b', alpha=0.5)
+plt.show()
+
+
+#ani = animate_water(solution2)
+# ani.save('water.gif', fps=25)
 
 """
 OUTDATED METHODS
