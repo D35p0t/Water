@@ -71,7 +71,7 @@ class solve_typeI:
         sol = np.zeros([self.Nt + 1, 2, self.N + 1])
         sol[0, :, :] = solve_typeI.in_state(self)
         for i in range(1, self.Nt + 1):
-            sol[i, :, :] = method(sol[i - 1, :, :], self.matrix_diff)
+            sol[i, :, :] = method(self, sol[i - 1, :, :], self.matrix_diff)
         self.sol = sol
 
 
@@ -145,30 +145,31 @@ solution1 = solve_typeII([0, 10], 10)
 solution1.matrix_factory()
 fig = plt.figure(figsize=(7, 4))
 ax = fig.add_subplot()
+x = np.linspace(0.48, 0.49, 11)
+print(x)
+for i in x:
 
-for i in range(4, 10):
+    #solution1 = solve_typeII([-15, 15], 150, 1000, i, 0)
+    #solution1.solveEquation(solve_typeII.RK4D)
 
-    x = np.linspace(0, 1, 2 ** i + 1)
-    solution1 = solve_typeII([0, 1], 2 ** i)
-    solution1.matrix_factory()
-    y1 = np.cos(solution1.x)
-    y_1 = -np.sin(solution1.x)
-    diff1 = (solution1.D @ y1.transpose()).transpose()
-    diff2 = -x
+    solution2 = solve_typeI([-15, 15], 150, 1000, i, 0)
+    solution2.solveEquation(solve_typeI.RK4D)
+    #u = solution1.sol[1, 0, :]
+    #h = solution1.sol[1, 1, :]
+    #delta = h0 * g * 0.5 * (u @ solution1.H @ u.transpose() + h @ solution1.H @ h.transpose())
+    #u = solution1.sol[solution1.Nt - 1, 0, :]
+    #h = solution1.sol[solution1.Nt - 1, 1, :]
+    #wy1.append(h0 * g * 0.5 * (u @ solution1.H @ u.transpose() + h @ solution1.H @ h.transpose()) - delta)
+    u = solution2.sol[1, 0, :]
+    h = solution2.sol[1, 1, :]
+    delta = h0 * g * 0.5 * (u @ solution2.H @ u.transpose() + h @ solution2.H @ h.transpose())
+    u = solution2.sol[solution2.Nt - 1, 0, :]
+    h = solution2.sol[solution2.Nt - 1, 1, :]
+    wy2.append(h0 * g * 0.5 * (u @ solution2.H @ u.transpose() + h @ solution2.H @ h.transpose()) - delta)
+    wx.append(i)
 
-    err1 = 0
-    err2 = 0
-    for j in range(i + 1):
-        err1 += (diff1[j] - y_1[j])**2
-        err2 += (diff2[j] - y_1[j])**2
-    wy1.append(np.sqrt(err1 / i))
-    wy2.append(np.sqrt(err2 / i))
-    wx.append(2 ** i)
-
-ax.set_yscale('log')
-ax.set_xscale('log')
-ax.plot(wx, wy1, 'o', color='r',  markersize=2)
-ax.plot(wx, wy1, color='r', alpha=0.5)
+#ax.plot(wx, wy1, 'o', color='r',  markersize=2)
+#ax.plot(wx, wy1, color='r', alpha=0.5)
 ax.plot(wx, wy2, 'o', color='b',  markersize=2)
 ax.plot(wx, wy2, color='b', alpha=0.5)
 plt.show()
