@@ -4,6 +4,58 @@ import matplotlib.animation as animation
 from scipy.sparse import spdiags
 
 
+
+
+class Segment_typeI:
+    def __init__(self, posX, N, t_ac=None, type_in=None, method=None):
+        self.sp = posX
+        self.N = N
+        self.t_ac = t_ac
+        self.X_in = self.in_state(type_in)
+        self.method = method
+        self.dt = None
+        self.x = None
+        self.dx = None
+        self.D = None
+        self.H = None
+        self.sol = None
+
+    def in_state(self, type_in):
+        if self.t_ac is not None:
+            global g, h0
+            self.dt = self.dx / (np.sqrt(g * h0) * self.t_ac)
+        self.matrix_factory()
+        if type_in == 0:
+            """ two-way wave """
+            return np.array([np.zeros(self.x.size), np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi)])
+        elif type_in == 1:
+            """ one-way wave """
+            return np.array(
+                [np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi),
+                 np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi)])
+        else:
+            return np.array([np.zeros(self.x.size), np.zeros(self.x.size)])
+
+    def matrix_factory(self):
+        self.dx = (self.sp[1] - self.sp[0]) / self.N
+        G = np.zeros([self.N + 1, self.N + 1])
+        H = np.eye(self.N + 1, self.N + 1)
+        H[:4, :4] = [[17 / 48, 0, 0, 0], [0, 59 / 48, 0, 0], [0, 0, 43 / 48, 0], [0, 0, 0, 49 / 48]]
+        H[-4:, -4:] = [[49 / 48, 0, 0, 0], [0, 43 / 48, 0, 0], [0, 0, 59 / 48, 0], [0, 0, 0, 17 / 48]]
+        G[:4, :6] = [[-1 / 2, 59 / 96, -1 / 12, -1 / 32, 0, 0], [-59 / 96, 0, 59 / 96, 0, 0, 0],
+                     [1 / 12, -59 / 96, 0, 59 / 96, -1 / 12, 0],
+                     [1 / 32, 0, -59 / 96, 0, 2 / 3, -1 / 12]]
+        for i in range(6):
+            for j in range(6):
+                G[self.N - i, self.N - j] = -G[i, j]
+        for i in range(4, self.N - 3):
+            G[i, i - 2:i + 3] = [1 / 12, -2 / 3, 0, 2 / 3, -1 / 12]
+        self.D = (np.linalg.inv(H) @ G) / self.dx
+        self.H = H
+        self.x = self.sp[0] + self.dx * np.arange(0, self.N + 1)
+
+
+"""
 class solve_typeI:
     def __init__(self, sp, N, Nt=None, t_ac=None, type_in=None):
         self.sp = sp
@@ -54,10 +106,8 @@ class solve_typeI:
 
     def in_state(self):
         if self.type_in == 0:
-            """ two-way wave """
             return np.array([np.zeros(self.x.size), np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi)])
         elif self.type_in == 1:
-            """ one-way wave """
             return np.array(
                 [np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi),
                  np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi)])
@@ -114,6 +164,36 @@ class solve_typeII(solve_typeI):
         self.D = np.linalg.lstsq(H, G, rcond=None)[0]
         self.H = H
 
+"""
+
+
+def RK4D(step, diff_method):
+    Diff_stack = np.zeros([len(system), 4])
+    for i in range(len(system)):
+        Diff_stack[i, 0] = diff_method(i, system[i].sol[step-1, :, :])
+
+    k2 = diff_method(state + k1 * segment.dt / 2)
+    k3 = diff_method(state + k2 * segment.dt / 2)
+    k4 = diff_method(state + k3 * segment.dt)
+    return state + segment.dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+
+def matrix_diff(segment, f):
+    diff = (segment.D @ f.transpose()).transpose()
+    diff = np.flip(diff, 0)
+    diff[0, :] = -g * diff[0, :]
+    diff[1, :] = -h0 * diff[1, :]
+    diff[0, 0] = 0
+    diff[0, -1] = 0
+    return diff
+
+def solveEquation(Nt):
+    for i in system:
+        i.sol = np.zeros([Nt + 1, 2, i.N + 1])
+        i.sol[0, :, :] = i.X_in
+    for step in range(1, Nt + 1):
+        RK4D(step, matrix_diff)
+    self.sol = sol
+
 
 def animate_water(sol):
     fig = plt.figure()
@@ -138,45 +218,11 @@ def animate_water(sol):
 
 g = 9.81
 h0 = 10
-wy1 = []
-wy2 = []
-wx = []
-solution1 = solve_typeII([0, 10], 10)
-solution1.matrix_factory()
-fig = plt.figure(figsize=(7, 4))
-ax = fig.add_subplot()
-x = np.linspace(0.48, 0.49, 11)
-print(x)
-for i in x:
-
-    #solution1 = solve_typeII([-15, 15], 150, 1000, i, 0)
-    #solution1.solveEquation(solve_typeII.RK4D)
-
-    solution2 = solve_typeI([-15, 15], 150, 1000, i, 0)
-    solution2.solveEquation(solve_typeI.RK4D)
-    #u = solution1.sol[1, 0, :]
-    #h = solution1.sol[1, 1, :]
-    #delta = h0 * g * 0.5 * (u @ solution1.H @ u.transpose() + h @ solution1.H @ h.transpose())
-    #u = solution1.sol[solution1.Nt - 1, 0, :]
-    #h = solution1.sol[solution1.Nt - 1, 1, :]
-    #wy1.append(h0 * g * 0.5 * (u @ solution1.H @ u.transpose() + h @ solution1.H @ h.transpose()) - delta)
-    u = solution2.sol[1, 0, :]
-    h = solution2.sol[1, 1, :]
-    delta = h0 * g * 0.5 * (u @ solution2.H @ u.transpose() + h @ solution2.H @ h.transpose())
-    u = solution2.sol[solution2.Nt - 1, 0, :]
-    h = solution2.sol[solution2.Nt - 1, 1, :]
-    wy2.append(h0 * g * 0.5 * (u @ solution2.H @ u.transpose() + h @ solution2.H @ h.transpose()) - delta)
-    wx.append(i)
-
-#ax.plot(wx, wy1, 'o', color='r',  markersize=2)
-#ax.plot(wx, wy1, color='r', alpha=0.5)
-ax.plot(wx, wy2, 'o', color='b',  markersize=2)
-ax.plot(wx, wy2, color='b', alpha=0.5)
-plt.show()
-
+system = [Segment_typeI([-10, 10], 150, 2, 0)]
 
 #ani = animate_water(solution2)
 # ani.save('water.gif', fps=25)
+
 
 """
 OUTDATED METHODS
