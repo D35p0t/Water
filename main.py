@@ -4,27 +4,25 @@ import matplotlib.animation as animation
 from scipy.sparse import spdiags
 
 
-
-
 class Segment_typeI:
-    def __init__(self, posX, N, t_ac=None, type_in=None, method=None):
-        self.sp = posX
+    def __init__(self, posX, N, t_ac=None, type_in=None):
+        self.posX = posX
         self.N = N
         self.t_ac = t_ac
-        self.X_in = self.in_state(type_in)
-        self.method = method
         self.dt = None
         self.x = None
         self.dx = None
         self.D = None
         self.H = None
-        self.sol = None
+        self.X_in = self.in_state(type_in)
+        self.sol = np.zeros([1, 2, N + 1])
+        self.sol[0] = self.X_in
 
     def in_state(self, type_in):
+        self.matrix_factory()
         if self.t_ac is not None:
             global g, h0
             self.dt = self.dx / (np.sqrt(g * h0) * self.t_ac)
-        self.matrix_factory()
         if type_in == 0:
             """ two-way wave """
             return np.array([np.zeros(self.x.size), np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi)])
@@ -37,7 +35,7 @@ class Segment_typeI:
             return np.array([np.zeros(self.x.size), np.zeros(self.x.size)])
 
     def matrix_factory(self):
-        self.dx = (self.sp[1] - self.sp[0]) / self.N
+        self.dx = (self.posX[1] - self.posX[0]) / self.N
         G = np.zeros([self.N + 1, self.N + 1])
         H = np.eye(self.N + 1, self.N + 1)
         H[:4, :4] = [[17 / 48, 0, 0, 0], [0, 59 / 48, 0, 0], [0, 0, 43 / 48, 0], [0, 0, 0, 49 / 48]]
@@ -52,7 +50,28 @@ class Segment_typeI:
             G[i, i - 2:i + 3] = [1 / 12, -2 / 3, 0, 2 / 3, -1 / 12]
         self.D = (np.linalg.inv(H) @ G) / self.dx
         self.H = H
-        self.x = self.sp[0] + self.dx * np.arange(0, self.N + 1)
+        self.x = self.posX[0] + self.dx * np.arange(0, self.N + 1)
+
+    def matrix_diff(self, f):
+        diff = (self.D @ f.transpose()).transpose()
+        diff = np.flip(diff, 0)
+        diff[0, :] = -g * diff[0, :]
+        diff[1, :] = -h0 * diff[1, :]
+        diff[0, 0] = 0
+        diff[0, -1] = 0
+        return diff
+
+    def RK4D(self):
+        k1 = self.matrix_diff(self.sol[-1])
+        k2 = self.matrix_diff(self.sol[-1] + k1 * self.dt / 2)
+        k3 = self.matrix_diff(self.sol[-1] + k2 * self.dt / 2)
+        k4 = self.matrix_diff(self.sol[-1] + k3 * self.dt)
+        return self.sol[-1] + self.dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+
+    def next_step(self):
+        m = self.RK4D()
+        self.sol = np.append(self.sol, [[np.zeros(self.x.size), np.zeros(self.x.size)]], 0)
+        self.sol[-1] = m
 
 
 """
@@ -167,37 +186,9 @@ class solve_typeII(solve_typeI):
 """
 
 
-def RK4D(step, diff_method):
-    Diff_stack = np.zeros([len(system), 4])
-    for i in range(len(system)):
-        Diff_stack[i, 0] = diff_method(i, system[i].sol[step-1, :, :])
-
-    k2 = diff_method(state + k1 * segment.dt / 2)
-    k3 = diff_method(state + k2 * segment.dt / 2)
-    k4 = diff_method(state + k3 * segment.dt)
-    return state + segment.dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
-
-def matrix_diff(segment, f):
-    diff = (segment.D @ f.transpose()).transpose()
-    diff = np.flip(diff, 0)
-    diff[0, :] = -g * diff[0, :]
-    diff[1, :] = -h0 * diff[1, :]
-    diff[0, 0] = 0
-    diff[0, -1] = 0
-    return diff
-
-def solveEquation(Nt):
-    for i in system:
-        i.sol = np.zeros([Nt + 1, 2, i.N + 1])
-        i.sol[0, :, :] = i.X_in
-    for step in range(1, Nt + 1):
-        RK4D(step, matrix_diff)
-    self.sol = sol
-
-
-def animate_water(sol):
+def animate_water(system):
     fig = plt.figure()
-    ax = fig.add_subplot(111, autoscale_on=False, xlim=(sol.sp[0] - 1, sol.sp[1] + 1), ylim=(5, 17))
+    ax = fig.add_subplot(111, autoscale_on=False, xlim=(system.posX[0] - 1, system.posX[1] + 1), ylim=(5, 17))
     ax.set_aspect('equal', adjustable='box')
     ax.grid()
     line, = ax.plot([], [], lw=2)
@@ -205,22 +196,26 @@ def animate_water(sol):
     time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
 
     def animate1(i):
-        thisx = sol.x
-        thisy = sol.sol[i, 1, :] + h0
+        thisx = system.x
+        thisy = system.sol[i, 1, :] + h0
         line.set_data(thisx, thisy)
-        time_text.set_text(time_template % (i * sol.dt))
+        time_text.set_text(time_template % (i * system.dt))
         return line, time_text
 
-    frames = animation.FuncAnimation(fig, animate1, sol.Nt, interval=sol.dt * sol.Nt, blit=True, repeat=False)
+    frames = animation.FuncAnimation(fig, animate1, system.sol.shape[0], interval=system.dt * system.sol.shape[0], blit=True, repeat=False)
     plt.show()
     return frames
 
 
 g = 9.81
 h0 = 10
-system = [Segment_typeI([-10, 10], 150, 2, 0)]
+segment = Segment_typeI([-10, 10], 150, 2, 0)
 
-#ani = animate_water(solution2)
+#segment.sol = np.append(segment.sol, [[np.zeros(segment.x.size), np.zeros(segment.x.size)]], 0)
+#print([[np.zeros(segment.x.size), np.zeros(segment.x.size)]])
+for i in range(1000):
+    segment.next_step()
+ani = animate_water(segment)
 # ani.save('water.gif', fps=25)
 
 
