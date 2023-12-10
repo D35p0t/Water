@@ -5,9 +5,10 @@ from scipy.sparse import spdiags
 
 
 class Segment_typeI:
-    def __init__(self, posX, N, t_ac=None, type_in=None):
+    def __init__(self, posX, N, bordX, t_ac=None, type_in=None):
         self.posX = posX
         self.N = N
+        self.bordX = bordX
         self.t_ac = t_ac
         self.dt = None
         self.x = None
@@ -25,12 +26,12 @@ class Segment_typeI:
             self.dt = self.dx / (np.sqrt(g * h0) * self.t_ac)
         if type_in == 0:
             """ two-way wave """
-            return np.array([np.zeros(self.x.size), np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi)])
+            return np.array([np.zeros(self.x.size), np.exp((-0.5) * ((self.x - 0.5*(self.posX[0] + self.posX[1])) ** 2)) / np.sqrt(2 * np.pi)])
         elif type_in == 1:
             """ one-way wave """
             return np.array(
-                [np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi),
-                 np.exp((-0.5) * (self.x ** 2)) / np.sqrt(2 * np.pi)])
+                [-np.exp((-0.5) * ((self.x - 0.5*(self.posX[0] + self.posX[1])) ** 2)) / np.sqrt(2 * np.pi),
+                 np.exp((-0.5) * ((self.x - 0.5*(self.posX[0] + self.posX[1])) ** 2)) / np.sqrt(2 * np.pi)])
         else:
             return np.array([np.zeros(self.x.size), np.zeros(self.x.size)])
 
@@ -57,8 +58,10 @@ class Segment_typeI:
         diff = np.flip(diff, 0)
         diff[0, :] = -g * diff[0, :]
         diff[1, :] = -h0 * diff[1, :]
-        diff[0, 0] = 0
-        diff[0, -1] = 0
+        if self.bordX[0] == 0:
+            diff[0, 0] = 0
+        if self.bordX[1] == 0:
+            diff[0, -1] = 0
         return diff
 
     def RK4D(self):
@@ -203,20 +206,30 @@ def animate_water(system):
         return line, time_text
 
     frames = animation.FuncAnimation(fig, animate1, system.sol.shape[0], interval=system.dt * system.sol.shape[0], blit=True, repeat=False)
-    plt.show()
+
     return frames
 
 
 g = 9.81
 h0 = 10
-segment = Segment_typeI([-10, 10], 150, 2, 0)
-
-#segment.sol = np.append(segment.sol, [[np.zeros(segment.x.size), np.zeros(segment.x.size)]], 0)
-#print([[np.zeros(segment.x.size), np.zeros(segment.x.size)]])
-for i in range(1000):
-    segment.next_step()
-ani = animate_water(segment)
-# ani.save('water.gif', fps=25)
+system = [Segment_typeI([0, 20], 150, [2, 0], 2, 1), Segment_typeI([-20, 0], 150, [0, 1], 2, 2)]
+#system = [Segment_typeI([0, 20], 150, [0, 0], 2, 1)]
+for i in range(600):
+    for j in system:
+        j.next_step()
+    for j in system:
+        if j.bordX[0] != 0:
+            j.sol[-1, :, 0] = (system[j.bordX[0]-1].sol[-1, :, -1] + j.sol[-1, :, 0])/2
+        if j.bordX[1] != 0:
+            j.sol[-1, :, -1] = (system[j.bordX[1]-1].sol[-1, :, 0] + j.sol[-1, :, -1])/2
+ani1 = animate_water(system[0])
+ani2 = animate_water(system[1])
+#for j in system:
+#ani = animate_water(j)
+plt.show()
+#ani = animate_water(system)
+ani1.save('water1.gif', fps=25)
+ani2.save('water2.gif', fps=25)
 
 
 """
