@@ -55,7 +55,7 @@ class Segment_typeI:
         self.H = H
         self.x = self.posX[0] + self.dx * np.arange(0, self.N + 1)
 
-    def matrix_diff(self, f):
+    def segment_diff(self, f):
         diff = (self.D @ f.transpose()).transpose()
         diff = np.flip(diff, 0)
         diff[0, :] = -g * diff[0, :]
@@ -65,18 +65,6 @@ class Segment_typeI:
         if self.bordX[1] == 0:
             diff[0, -1] = 0
         return diff
-
-    def RK4D(self):
-        k1 = self.matrix_diff(self.sol[-1])
-        k2 = self.matrix_diff(self.sol[-1] + k1 * self.dt / 2)
-        k3 = self.matrix_diff(self.sol[-1] + k2 * self.dt / 2)
-        k4 = self.matrix_diff(self.sol[-1] + k3 * self.dt)
-        return self.sol[-1] + self.dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
-
-    def next_step(self):
-        m = self.RK4D()
-        self.sol = np.append(self.sol, [[np.zeros(self.N + 1), np.zeros(self.N + 1)]], 0)
-        self.sol[-1] = m
 
 
 class Segment_typeII(Segment_typeI):
@@ -119,6 +107,39 @@ class Segment_typeII(Segment_typeI):
         self.H = H
 
 
+def solving():
+    for step in range(10000):
+        storage = np.zeros([4, len(system), 2, 151])
+        for i in system:
+            storage[0, system.index(i)] = i.segment_diff(i.sol[-1])
+        border(storage[0])
+        for i in system:
+            storage[1, system.index(i)] = i.segment_diff(i.sol[-1] + i.dt / 2 * storage[0, system.index(i)])
+        border(storage[1])
+        for i in system:
+            storage[2, system.index(i)] = i.segment_diff(i.sol[-1] + i.dt / 2 * storage[1, system.index(i)])
+        border(storage[2])
+        for i in system:
+            storage[3, system.index(i)] = i.segment_diff(i.sol[-1] + i.dt * storage[2, system.index(i)])
+        border(storage[3])
+        for i in system:
+            m = system.index(i)
+            i.sol = np.append(i.sol, [[np.zeros(i.N + 1), np.zeros(i.N + 1)]], 0)
+            i.sol[-1] = i.sol[-2] + i.dt * (storage[0,m] + 2 * storage[1,m] + 2 * storage[2,m] + storage[3,m]) / 6
+
+
+
+def border(storage):
+    for check in system:
+        id_check = system.index(check)
+        if check.bordX[0] != 0 and id_check < check.bordX[0]:
+            storage[id_check, :, 0] = (storage[id_check, :, 0] + storage[check.bordX[0] - 1, :, -1]) / 2
+            storage[check.bordX[0] - 1, :, -1] = storage[id_check, :, 0]
+        if check.bordX[1] != 0 and id_check < check.bordX[0]:
+            storage[id_check, :, -1] = (storage[id_check, :, -1] + storage[check.bordX[1] - 1, :, 0]) / 2
+            storage[check.bordX[1] - 1, :, 0] = storage[id_check, :, -1]
+
+
 def animate_water(element):
     fig = plt.figure()
     ax = fig.add_subplot(111, autoscale_on=False, xlim=(element.posX[0] - 1, element.posX[1] + 1), ylim=(5, 17))
@@ -140,19 +161,14 @@ def animate_water(element):
     return frames
 
 
+
+
+
 g = 9.81
 h0 = 10
 system = [Segment_typeII([-20, 0], 150, [2, 2], 2, 3), Segment_typeII([0, 20], 150, [1, 1], 2, 1)]
-for v in range(2000):
-    for b in system:
-        b.next_step()
-    for b in range(len(system)):
-        if system[b].bordX[0] != 0 and b < system[b].bordX[0]:
-            system[b].sol[-1, :, 0] = (system[system[b].bordX[0] - 1].sol[-1, :, -1] + system[b].sol[-1, :, 0]) / 2
-            system[system[b].bordX[0] - 1].sol[-1, :, -1] = system[b].sol[-1, :, 0]
-        if system[b].bordX[1] != 0 and b < system[b].bordX[1]:
-            system[b].sol[-1, :, -1] = (system[system[b].bordX[1] - 1].sol[-1, :, 0] + system[b].sol[-1, :, -1]) / 2
-            system[system[b].bordX[1] - 1].sol[-1, :, 0] = system[b].sol[-1, :, -1]
+solving()
+
 ani1 = animate_water(system[0])
 ani2 = animate_water(system[1])
 # for j in system:
@@ -161,3 +177,29 @@ plt.show()
 # ani = animate_water(system)
 # ani1.save('water1.gif', fps=25)
 # ani2.save('water2.gif', fps=25)
+"""
+def matrix_diff(segment):
+    diff = (self.D @ f.transpose()).transpose()
+    diff = np.flip(diff, 0)
+    diff[0, :] = -g * diff[0, :]
+    diff[1, :] = -h0 * diff[1, :]
+    if self.bordX[0] == 0:
+        diff[0, 0] = 0
+    if self.bordX[1] == 0:
+        diff[0, -1] = 0
+    return diff
+
+
+def RK4D(self):
+    k1 = self.matrix_diff(self.sol[-1])
+    k2 = self.matrix_diff(self.sol[-1] + k1 * self.dt / 2)
+    k3 = self.matrix_diff(self.sol[-1] + k2 * self.dt / 2)
+    k4 = self.matrix_diff(self.sol[-1] + k3 * self.dt)
+    return self.sol[-1] + self.dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+
+
+def next_step(self):
+    m = self.RK4D()
+    self.sol = np.append(self.sol, [[np.zeros(self.N + 1), np.zeros(self.N + 1)]], 0)
+    self.sol[-1] = m
+"""
