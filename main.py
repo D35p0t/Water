@@ -5,37 +5,34 @@ from scipy.sparse import spdiags
 
 
 class Segment_typeI:
-    def __init__(self, posX, N, bordX, t_ac=None, type_in=None):
+    def __init__(self, posX, N, bordX, type_in=None, dt=None):
         self.posX = posX
         self.N = N
         self.bordX = bordX
-        self.t_ac = t_ac
-        self.dt = None
+        self.dt = dt
         self.x = None
         self.dx = None
         self.D = None
         self.H = None
         self.X_in = self.in_state(type_in)
-        self.sol = np.zeros([1, 2, N + 1])
+        self.sol = np.zeros([1, 3, N + 1])
         self.sol[0] = self.X_in
 
     def in_state(self, type_in):
         self.matrix_factory()
-        if self.t_ac is not None:
-            global g, h0
-            self.dt = self.dx / (np.sqrt(g * h0) * self.t_ac)
         if type_in == 0:
             """ two-way wave """
             return np.array([np.zeros(self.x.size),
-                             np.exp((-0.5) * ((self.x - 0.5 * (self.posX[0] + self.posX[1])) ** 2)) / np.sqrt(
-                                 2 * np.pi)])
+                             np.exp((-0.5) * (((self.x - 0.5 * (self.posX[0] + self.posX[1]))/0.3) ** 2)) / np.sqrt(2 * np.pi) / 0.3,
+                             np.zeros(self.x.size)])
         elif type_in == 1:
             """ one-way wave """
             return np.array(
-                [np.exp((-0.5) * ((self.x - 0.5 * (self.posX[0] + self.posX[1])) ** 2)) / np.sqrt(2 * np.pi),
-                 np.exp((-0.5) * ((self.x - 0.5 * (self.posX[0] + self.posX[1])) ** 2)) / np.sqrt(2 * np.pi)])
+                [np.exp((-0.5) * (((self.x - 0.5 * (self.posX[0] + self.posX[1]))/0.3) ** 2)) / np.sqrt(2 * np.pi) / 0.3,
+                 np.exp((-0.5) * (((self.x - 0.5 * (self.posX[0] + self.posX[1]))/0.3) ** 2)) / np.sqrt(2 * np.pi) / 0.3,
+                 np.zeros(self.x.size)])
         else:
-            return np.array([np.zeros(self.x.size), np.zeros(self.x.size)])
+            return np.array([np.zeros(self.x.size), np.zeros(self.x.size), np.zeros(self.x.size)])
 
     def matrix_factory(self):
         self.dx = (self.posX[1] - self.posX[0]) / self.N
@@ -57,9 +54,10 @@ class Segment_typeI:
 
     def segment_diff(self, f):
         diff = (self.D @ f.transpose()).transpose()
-        diff = np.flip(diff, 0)
-        diff[0, :] = -g * diff[0, :]
+        diff[[0, 1]] = diff[[1, 0]]
+        diff[0, :] = -g * diff[0, :] + kor * f[2]
         diff[1, :] = -h0 * diff[1, :]
+        diff[2, :] = - kor * f[0]
         if self.bordX[0] == 0:
             diff[0, 0] = 0
         if self.bordX[1] == 0:
@@ -108,45 +106,39 @@ class Segment_typeII(Segment_typeI):
 
 
 def solving():
-    for step in range(10000):
-        storage = np.zeros([4, len(system), 2, 151])
-        for i in system:
-            storage[0, system.index(i)] = i.segment_diff(i.sol[-1])
-        border(storage[0])
-        for i in system:
-            storage[1, system.index(i)] = i.segment_diff(i.sol[-1] + i.dt / 2 * storage[0, system.index(i)])
-        border(storage[1])
-        for i in system:
-            storage[2, system.index(i)] = i.segment_diff(i.sol[-1] + i.dt / 2 * storage[1, system.index(i)])
-        border(storage[2])
-        for i in system:
-            storage[3, system.index(i)] = i.segment_diff(i.sol[-1] + i.dt * storage[2, system.index(i)])
-        border(storage[3])
+    for step in range(1000):
+        k1 = [i.segment_diff(i.sol[-1]) for i in system]
+        border(k1)
+        k2 = [i.segment_diff(i.sol[-1] + i.dt / 2 * k1[system.index(i)]) for i in system]
+        border(k2)
+        k3 = [i.segment_diff(i.sol[-1] + i.dt / 2 * k2[system.index(i)]) for i in system]
+        border(k3)
+        k4 = [i.segment_diff(i.sol[-1] + i.dt * k3[system.index(i)]) for i in system]
+        border(k4)
         for i in system:
             m = system.index(i)
-            i.sol = np.append(i.sol, [[np.zeros(i.N + 1), np.zeros(i.N + 1)]], 0)
-            i.sol[-1] = i.sol[-2] + i.dt * (storage[0,m] + 2 * storage[1,m] + 2 * storage[2,m] + storage[3,m]) / 6
-
+            i.sol = np.append(i.sol, [[np.zeros(i.N + 1), np.zeros(i.N + 1), np.zeros(i.N + 1)]], 0)
+            i.sol[-1] = i.sol[-2] + i.dt * (k1[m] + 2 * k2[m] + 2 * k3[m] + k4[m]) / 6
 
 
 def border(storage):
     for check in system:
         id_check = system.index(check)
         if check.bordX[0] != 0 and id_check < check.bordX[0]:
-            storage[id_check, :, 0] = (storage[id_check, :, 0] + storage[check.bordX[0] - 1, :, -1]) / 2
-            storage[check.bordX[0] - 1, :, -1] = storage[id_check, :, 0]
-        if check.bordX[1] != 0 and id_check < check.bordX[0]:
-            storage[id_check, :, -1] = (storage[id_check, :, -1] + storage[check.bordX[1] - 1, :, 0]) / 2
-            storage[check.bordX[1] - 1, :, 0] = storage[id_check, :, -1]
+            storage[id_check][:, 0] = (storage[id_check][:, 0] + storage[check.bordX[0] - 1][:, -1]) / 2
+            storage[check.bordX[0] - 1][:, -1] = storage[id_check][:, 0]
+        if check.bordX[1] != 0 and id_check < check.bordX[1]:
+            storage[id_check][:, -1] = (storage[id_check][:, -1] + storage[check.bordX[1] - 1][:, 0]) / 2
+            storage[check.bordX[1] - 1][:, 0] = storage[id_check][:, -1]
 
 
 def animate_water(element):
     fig = plt.figure()
-    ax = fig.add_subplot(111, autoscale_on=False, xlim=(element.posX[0] - 1, element.posX[1] + 1), ylim=(5, 17))
+    ax = fig.add_subplot(111, autoscale_on=True, xlim=(element.posX[0] - 1, element.posX[1] + 1), ylim=(h0 - 2, h0 + 4))
     ax.set_aspect('equal', adjustable='box')
     ax.grid()
     line, = ax.plot([], [], lw=2)
-    time_template = 'time = %1fs'
+    time_template = 'time = %6fs'
     time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
 
     def animate1(i):
@@ -162,11 +154,12 @@ def animate_water(element):
 
 
 
-
-
 g = 9.81
 h0 = 10
-system = [Segment_typeII([-20, 0], 150, [2, 2], 2, 3), Segment_typeII([0, 20], 150, [1, 1], 2, 1)]
+delta = 0.003
+kor = 0
+system = [Segment_typeII([-20, 0], 150, [0, 2], 3, delta), Segment_typeII([0, 20], 150, [1, 0], 0, delta)]
+
 solving()
 
 ani1 = animate_water(system[0])
@@ -174,32 +167,6 @@ ani2 = animate_water(system[1])
 # for j in system:
 # ani = animate_water(j)
 plt.show()
-# ani = animate_water(system)
-# ani1.save('water1.gif', fps=25)
-# ani2.save('water2.gif', fps=25)
-"""
-def matrix_diff(segment):
-    diff = (self.D @ f.transpose()).transpose()
-    diff = np.flip(diff, 0)
-    diff[0, :] = -g * diff[0, :]
-    diff[1, :] = -h0 * diff[1, :]
-    if self.bordX[0] == 0:
-        diff[0, 0] = 0
-    if self.bordX[1] == 0:
-        diff[0, -1] = 0
-    return diff
-
-
-def RK4D(self):
-    k1 = self.matrix_diff(self.sol[-1])
-    k2 = self.matrix_diff(self.sol[-1] + k1 * self.dt / 2)
-    k3 = self.matrix_diff(self.sol[-1] + k2 * self.dt / 2)
-    k4 = self.matrix_diff(self.sol[-1] + k3 * self.dt)
-    return self.sol[-1] + self.dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
-
-
-def next_step(self):
-    m = self.RK4D()
-    self.sol = np.append(self.sol, [[np.zeros(self.N + 1), np.zeros(self.N + 1)]], 0)
-    self.sol[-1] = m
-"""
+ani = animate_water(system)
+#ani1.save('water1.gif', fps=25)
+#ani2.save('water2.gif', fps=25)
