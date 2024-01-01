@@ -158,7 +158,7 @@ g = 9.81
 h0 = 10
 delta = 0.003
 kor = 0
-system = [Segment_typeII([-10, 0], 150, [0, 2], 3, delta), Segment_typeII([0, 20], 150, [1, 0], 0, delta)]
+system = [Segment_typeII([-20, 0], 150, [0, 2], 3, delta), Segment_typeII([0, 20], 150, [1, 0], 0, delta)]
 
 solving()
 
